@@ -1,6 +1,6 @@
 # Auggie Workbench Handoff
 
-Last updated: 2026-07-04
+Last updated: 2026-07-19
 
 ## Repository
 
@@ -146,44 +146,43 @@ After the final user smoke test, no additional code verification was run because
 
 ## Known Caveats
 
-- Auggie only used the terminal tool when explicitly asked by exact tool name.
-- Next work should improve the tool name/description/schema so Auggie naturally prefers it.
-- Consider exposing alias tools:
-  - `run_terminal_command`
-  - `run_command`
-  - `run_in_vscode_terminal`
+RESOLVED since 2026-07-04 (kept for history):
+
+- ~~Auggie only used the terminal tool when explicitly asked by exact tool name.~~ Alias tools were added, and as of 2026-07-19 the extension also ships `rules/visible-terminal.md` injected via `--rules`, so Auggie chooses the visible terminal unprompted (verified: `TERM_PROGRAM=[vscode]`).
+- ~~MCP bridge availability does not force Auggie away from `launch-process`.~~ Still true at the protocol level, but the bundled rule now steers it and tells it to STOP AND ASK rather than fall back invisibly. Tool choice remains model-driven, so keep regression smoke tests.
+- ~~Keep/discard Edits actions are still pending.~~ Implemented (`Discard All` still untested against non-disposable changes).
+- ~~Recent conversation tree is still pending.~~ Implemented.
+- ~~Packaging should be checked.~~ Verified; `media/`, `scripts/`, and `rules/` are included in the VSIX.
+
+Still open:
+
 - The terminal screenshot showed the project venv activating after the command. Only investigate if that extra terminal output becomes noisy.
-- MCP bridge availability does not force Auggie away from its internal `launch-process` tool. It only gives Auggie another tool.
-- Keep/discard Edits actions are still pending.
-- Recent conversation tree is still pending.
-- Packaging should be checked before any actual install/distribution; ensure `media/` and `scripts/` are included.
+- Auggie can emit the SAME command twice within one turn (observed with `git status`). The turn-scoped duplicate-command guard is designed but not built.
+- If shell integration is unavailable the extension falls back to a hidden process; this is now loudly surfaced (toast + banner + `Auggie (hidden):` tab) but Ctrl+C and shell history still do not work in that mode.
 
 ## Best Next Steps
 
-1. Improve terminal MCP tool ergonomics.
-   - Add friendlier alias tools in `scripts/auggie-terminal-mcp.js`.
-   - Tune descriptions so Auggie understands these are preferred for visible terminal execution.
-   - Retest with prompts like:
+Items 1-5 from the 2026-07-04 version of this list (terminal MCP alias tools, terminal/action cards, Edits polish, session/thread tree, package smoke test) are all DONE. Current list:
 
-```text
-Run node --version in the VS Code terminal.
-```
+1. Turn-scoped duplicate-command guard (top priority; designed, not built).
+   - Auggie can emit the same command twice in one turn (two `tool_call` events, two terminals).
+   - Suppress a duplicate identical command (same command+args+cwd) WITHIN one agent turn; return the first result for the repeat.
+   - ANY new user message resets the turn scope, so a deliberate "check it again" always re-runs.
+   - Needs turn-awareness wired from the ACP session/prompt layer to `TerminalMcpBridge`; an in-flight check alone is not enough (the observed duplicate was sequential).
 
-2. Improve terminal/action cards.
-   - Show command text and output preview in action cards.
-   - Show whether the command used visible terminal MCP vs internal `launch-process`.
+2. Housekeeping.
+   - Delete/archive old milestone branches (`auggie-package-smoke` and the older stacked branches); `main` is the baseline.
+   - Move the untracked screenshot zips out of the repo root.
+   - Re-package and install-smoke a fresh VSIX (current artifact `0.2.3` predates the 2026-07-19 hardening pass).
 
-3. Continue Edits polish.
-   - Add untracked-file detection.
-   - Add binary-file labeling.
-   - Add Keep All / Discard All if useful.
+3. More test seams (the MCP alias test landed 2026-07-19).
+   - Action-card parsing.
+   - Changed-file snapshot parsing.
+   - A regression smoke checklist for the terminal-routing contract after Auggie CLI updates.
 
-4. Continue session/thread work.
-   - Show recent conversations in the Threads tree.
-   - Let user open older conversations from the tree.
+4. Split `ChatWebviewProvider.ts` (~2900 lines) before growing slash-menu/message-rendering/visual-polish surface.
 
-5. Package smoke test.
-   - Confirm `media/chatWebview.js` and `scripts/auggie-terminal-mcp.js` are included.
+5. Deliberately scope checkpoints/revert before implementing.
 
 ## Instructions For The Next Agent
 
@@ -199,16 +198,23 @@ First read:
 
 Do not work in AugmentCode-Free. Verify cwd is vscode-acp.
 
-The current priority is improving the successful visible-terminal MCP bridge so Auggie naturally chooses it. The bridge already works when explicitly prompted with:
-"Use the run_command_in_vscode_terminal MCP tool to run node --version."
+Current state: all work is on `main`. The visible-terminal path is working end to end
+- Auggie chooses the visible VS Code terminal on its own (bundled rules/visible-terminal.md
+injected via --rules), output is sanitized in the action cards, and a fallback to hidden
+execution is loudly surfaced. Test suite is 21 passing.
 
-Next likely task:
-- Add friendlier alias MCP tools such as run_terminal_command / run_command / run_in_vscode_terminal in scripts/auggie-terminal-mcp.js.
-- Keep them all forwarding to the same extension bridge.
-- Tune tool descriptions for visible VS Code terminal execution.
-- Run node --check, npm run compile, npm run lint.
-- Then give me clear dev-host test instructions.
+The current priority is the turn-scoped duplicate-command guard: Auggie can emit the
+same command twice within one turn. Suppress within-turn duplicate identical commands
+and reset the scope on any new user message, so a deliberate "check it again" still
+re-runs. This needs turn-awareness from the ACP session layer down to TerminalMcpBridge.
 
-Please keep AUGGIE_SESSION_NOTES.md and AUGGIE_WORKBENCH_TODO.md updated.
+Workflow expectations:
+- Run npm test (compile + lint + tests) before proposing anything as done.
+- Do NOT push to origin/main until the user has smoke-tested in the F5 dev host;
+  automated tests passing is necessary but not sufficient.
+- Keep commits small and separated by logical change.
+- At the end of the session, add a dated entry to the Session Log in
+  AUGGIE_SESSION_NOTES.md, tick off completed items in AUGGIE_WORKBENCH_TODO.md,
+  and update this handoff if priorities changed.
 ```
 
